@@ -1,17 +1,24 @@
-CONTROLE DE SALDOS
+CONTROLE DE SALDOS CIS - V2
 
-Aplicativo Windows simples para registrar três saldos:
-- Correios Atende
-- Caixa
-- Cofre
+Esta versão foi adaptada para a CIS que aparece no Gerenciador de Dispositivos como:
 
-O total é calculado automaticamente.
+CIS P1000-10 printer USB (COM2)
 
-Impressão:
-- Seleciona uma impressora instalada no Windows.
-- O relatório é enviado diretamente pelo driver da impressora.
-- Os valores são impressos em fonte grande e em negrito.
-- O aplicativo foi pensado para impressoras térmicas CIS.
+A impressão agora é feita diretamente pela porta serial, sem depender de a CIS aparecer em "Impressoras e scanners".
 
-O tamanho físico do papel é controlado pelo driver da impressora. Para uma CIS de 80 mm,
-deixe o driver configurado para o rolo/tamanho de papel correto.
+COMO USAR
+1. Abra o programa.
+2. A porta COM2 deve aparecer automaticamente se a CIS estiver conectada.
+3. Deixe a velocidade em 9600 inicialmente.
+4. Digite os três saldos.
+5. Clique em IMPRIMIR.
+
+SE NÃO IMPRIMIR
+A velocidade serial pode variar conforme a configuração da CIS.
+Experimente 19200, 38400, 57600 ou 115200.
+
+IMPORTANTE
+O programa envia comandos no padrão ESC/POS, normalmente usado por impressoras térmicas.
+Se a CIS usar outro protocolo/emulação, será necessário adaptar os comandos.
+
+A interface também foi ampliada para evitar que os campos de valores fiquem cortados.

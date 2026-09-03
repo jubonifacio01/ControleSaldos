@@ -2,14 +2,20 @@ using System;
 using System.Drawing;
 using System.Drawing.Printing;
 using System.Globalization;
+using System.IO;
+using System.IO.Ports;
 using System.Linq;
+using System.Text;
 using System.Windows.Forms;
+
+namespace ControleSaldosCIS;
 
 internal static class Program
 {
     [STAThread]
     static void Main()
     {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         ApplicationConfiguration.Initialize();
         Application.Run(new MainForm());
     }
@@ -17,138 +23,185 @@ internal static class Program
 
 public sealed class MainForm : Form
 {
-    private readonly TextBox atende;
-    private readonly TextBox caixa;
-    private readonly TextBox cofre;
-    private readonly Label totalLabel;
-    private readonly ComboBox printerCombo;
-    private readonly Button printButton;
-    private readonly Button clearButton;
+    private readonly TextBox txtAtende = CreateMoneyBox();
+    private readonly TextBox txtCaixa = CreateMoneyBox();
+    private readonly TextBox txtCofre = CreateMoneyBox();
 
-    private readonly CultureInfo br = new("pt-BR");
+    private readonly ComboBox cmbPorta = new();
+    private readonly ComboBox cmbVelocidade = new();
+    private readonly Label lblTotal = new();
+    private readonly Label lblStatus = new();
+
+    private const string DefaultBaud = "9600";
 
     public MainForm()
     {
         Text = "Controle de Saldos";
-        Width = 520;
-        Height = 510;
         StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(680, 760);
+        ClientSize = new Size(680, 760);
+        Font = new Font("Segoe UI", 10F);
+        BackColor = Color.FromArgb(245, 245, 245);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
 
+        BuildInterface();
+        AtualizarTotal();
+        AtualizarPortas();
+    }
+
+    private void BuildInterface()
+    {
         var title = new Label
         {
             Text = "CONTROLE DE SALDOS",
-            Left = 25, Top = 18, Width = 450, Height = 38,
-            Font = new Font("Segoe UI", 17, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleCenter
+            Font = new Font("Segoe UI", 22F, FontStyle.Bold),
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            Bounds = new Rectangle(30, 25, 620, 45)
         };
+        Controls.Add(title);
 
         var subtitle = new Label
         {
             Text = "Informe os três saldos para impressão",
-            Left = 25, Top = 55, Width = 450, Height = 25,
-            Font = new Font("Segoe UI", 9),
-            TextAlign = ContentAlignment.MiddleCenter
-        };
-
-        atende = MoneyBox();
-        caixa = MoneyBox();
-        cofre = MoneyBox();
-
-        AddField("CORREIOS ATENDE", atende, 95);
-        AddField("CAIXA", caixa, 175);
-        AddField("COFRE", cofre, 255);
-
-        totalLabel = new Label
-        {
-            Text = "TOTAL  R$ 0,00",
-            Left = 25, Top = 335, Width = 450, Height = 42,
-            Font = new Font("Segoe UI", 15, FontStyle.Bold),
+            Font = new Font("Segoe UI", 10.5F),
+            ForeColor = Color.DimGray,
+            AutoSize = false,
             TextAlign = ContentAlignment.MiddleCenter,
-            BorderStyle = BorderStyle.FixedSingle
+            Bounds = new Rectangle(30, 70, 620, 30)
         };
+        Controls.Add(subtitle);
+
+        AddSaldoRow("CORREIOS ATENDE", txtAtende, 125);
+        AddSaldoRow("CAIXA", txtCaixa, 240);
+        AddSaldoRow("COFRE", txtCofre, 355);
+
+        var totalPanel = new Panel
+        {
+            Bounds = new Rectangle(30, 470, 620, 78),
+            BorderStyle = BorderStyle.FixedSingle,
+            BackColor = Color.White
+        };
+        Controls.Add(totalPanel);
+
+        lblTotal.Font = new Font("Segoe UI", 20F, FontStyle.Bold);
+        lblTotal.Dock = DockStyle.Fill;
+        lblTotal.TextAlign = ContentAlignment.MiddleCenter;
+        totalPanel.Controls.Add(lblTotal);
 
         var printerLabel = new Label
         {
-            Text = "Impressora:",
-            Left = 25, Top = 393, Width = 75, Height = 27,
+            Text = "Porta da CIS:",
+            Bounds = new Rectangle(30, 575, 115, 32),
             TextAlign = ContentAlignment.MiddleLeft
         };
+        Controls.Add(printerLabel);
 
-        printerCombo = new ComboBox
+        cmbPorta.Bounds = new Rectangle(145, 572, 230, 36);
+        cmbPorta.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbPorta.Font = new Font("Segoe UI", 11F);
+        Controls.Add(cmbPorta);
+
+        var refresh = new Button
         {
-            Left = 100, Top = 390, Width = 350, Height = 30,
-            DropDownStyle = ComboBoxStyle.DropDownList
+            Text = "ATUALIZAR",
+            Bounds = new Rectangle(385, 572, 125, 36),
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Bold)
         };
+        refresh.Click += (_, _) => AtualizarPortas();
+        Controls.Add(refresh);
 
-        clearButton = new Button
+        var baudLabel = new Label
         {
-            Text = "LIMPAR",
-            Left = 25, Top = 435, Width = 130, Height = 38
+            Text = "Velocidade:",
+            Bounds = new Rectangle(30, 620, 115, 32),
+            TextAlign = ContentAlignment.MiddleLeft
         };
+        Controls.Add(baudLabel);
 
-        printButton = new Button
+        cmbVelocidade.Bounds = new Rectangle(145, 617, 230, 36);
+        cmbVelocidade.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmbVelocidade.Font = new Font("Segoe UI", 11F);
+        cmbVelocidade.Items.AddRange(new object[] { "9600", "19200", "38400", "57600", "115200" });
+        cmbVelocidade.SelectedItem = DefaultBaud;
+        Controls.Add(cmbVelocidade);
+
+        var print = new Button
         {
             Text = "IMPRIMIR",
-            Left = 295, Top = 435, Width = 155, Height = 38,
-            Font = new Font("Segoe UI", 10, FontStyle.Bold)
+            Bounds = new Rectangle(30, 675, 300, 55),
+            Font = new Font("Segoe UI", 14F, FontStyle.Bold),
+            BackColor = Color.White
         };
+        print.Click += (_, _) => ImprimirCIS();
+        Controls.Add(print);
 
-        Controls.AddRange(new Control[]
+        var clear = new Button
         {
-            title, subtitle, totalLabel, printerLabel, printerCombo,
-            clearButton, printButton
-        });
-
-        foreach (var tb in new[] { atende, caixa, cofre })
-        {
-            tb.TextChanged += (_, _) => UpdateTotal();
-            tb.KeyDown += MoneyBox_KeyDown;
-        }
-
-        clearButton.Click += (_, _) =>
-        {
-            atende.Clear();
-            caixa.Clear();
-            cofre.Clear();
-            atende.Focus();
+            Text = "LIMPAR",
+            Bounds = new Rectangle(350, 675, 300, 55),
+            Font = new Font("Segoe UI", 14F, FontStyle.Bold),
+            BackColor = Color.White
         };
+        clear.Click += (_, _) =>
+        {
+            txtAtende.Clear();
+            txtCaixa.Clear();
+            txtCofre.Clear();
+            AtualizarTotal();
+            txtAtende.Focus();
+        };
+        Controls.Add(clear);
 
-        printButton.Click += (_, _) => PrintReport();
+        lblStatus.Text = "Pronto.";
+        lblStatus.Font = new Font("Segoe UI", 9F);
+        lblStatus.ForeColor = Color.DimGray;
+        lblStatus.AutoSize = false;
+        lblStatus.TextAlign = ContentAlignment.MiddleCenter;
+        lblStatus.Bounds = new Rectangle(30, 735, 620, 22);
+        Controls.Add(lblStatus);
 
-        LoadPrinters();
-        atende.Focus();
+        txtAtende.TextChanged += (_, _) => AtualizarTotal();
+        txtCaixa.TextChanged += (_, _) => AtualizarTotal();
+        txtCofre.TextChanged += (_, _) => AtualizarTotal();
+
+        txtAtende.KeyDown += MoneyKeyDown;
+        txtCaixa.KeyDown += MoneyKeyDown;
+        txtCofre.KeyDown += MoneyKeyDown;
+
+        AcceptButton = print;
     }
 
-    private TextBox MoneyBox()
-    {
-        return new TextBox
-        {
-            Width = 360,
-            Height = 38,
-            Font = new Font("Segoe UI", 17, FontStyle.Bold),
-            TextAlign = HorizontalAlignment.Right,
-            PlaceholderText = "0,00"
-        };
-    }
-
-    private void AddField(string caption, TextBox box, int top)
+    private void AddSaldoRow(string caption, TextBox box, int top)
     {
         var label = new Label
         {
             Text = caption,
-            Left = 25, Top = top, Width = 150, Height = 38,
-            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            Font = new Font("Segoe UI", 13F, FontStyle.Bold),
+            Bounds = new Rectangle(30, top + 18, 210, 45),
             TextAlign = ContentAlignment.MiddleLeft
         };
-        box.Left = 165;
-        box.Top = top - 3;
         Controls.Add(label);
+
+        box.Bounds = new Rectangle(240, top, 410, 82);
+        box.Font = new Font("Segoe UI", 26F, FontStyle.Bold);
+        box.TextAlign = HorizontalAlignment.Right;
+        box.Margin = new Padding(0);
+        box.BorderStyle = BorderStyle.FixedSingle;
         Controls.Add(box);
     }
 
-    private void MoneyBox_KeyDown(object? sender, KeyEventArgs e)
+    private static TextBox CreateMoneyBox()
+    {
+        return new TextBox
+        {
+            PlaceholderText = "0,00",
+            MaxLength = 15
+        };
+    }
+
+    private void MoneyKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.KeyCode == Keys.Enter)
         {
@@ -157,170 +210,147 @@ public sealed class MainForm : Form
         }
     }
 
-    private decimal ReadMoney(TextBox box)
+    private void AtualizarTotal()
     {
-        var text = box.Text.Trim();
+        decimal total = LerValor(txtAtende) + LerValor(txtCaixa) + LerValor(txtCofre);
+        lblTotal.Text = $"TOTAL   R$ {total:N2}";
+    }
+
+    private static decimal LerValor(TextBox box)
+    {
+        var text = (box.Text ?? "").Trim();
         if (string.IsNullOrWhiteSpace(text))
             return 0m;
 
-        // Accepts both 1234,56 and 1.234,56, as well as plain 1234.56.
-        text = text.Replace("R$", "").Trim();
+        if (decimal.TryParse(text, NumberStyles.Number, CultureInfo.GetCultureInfo("pt-BR"), out var br))
+            return br;
 
-        if (decimal.TryParse(text, NumberStyles.Number, br, out var value))
-            return value;
-
-        if (decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value))
-            return value;
+        if (decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var inv))
+            return inv;
 
         return 0m;
     }
 
-    private void UpdateTotal()
+    private void AtualizarPortas()
     {
-        var total = ReadMoney(atende) + ReadMoney(caixa) + ReadMoney(cofre);
-        totalLabel.Text = $"TOTAL  {total.ToString("C", br)}";
+        string atual = cmbPorta.SelectedItem?.ToString() ?? "";
+        var portas = SerialPort.GetPortNames()
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        cmbPorta.Items.Clear();
+        foreach (var porta in portas)
+            cmbPorta.Items.Add(porta);
+
+        if (portas.Contains(atual, StringComparer.OrdinalIgnoreCase))
+            cmbPorta.SelectedItem = atual;
+        else if (portas.Contains("COM2", StringComparer.OrdinalIgnoreCase))
+            cmbPorta.SelectedItem = "COM2";
+        else if (portas.Length > 0)
+            cmbPorta.SelectedIndex = 0;
+
+        if (portas.Length == 0)
+            lblStatus.Text = "Nenhuma porta COM encontrada.";
+        else
+            lblStatus.Text = $"{portas.Length} porta(s) COM encontrada(s). A CIS foi identificada como COM2 no seu computador.";
     }
 
-    private void LoadPrinters()
+    private void ImprimirCIS()
     {
-        foreach (string printer in PrinterSettings.InstalledPrinters)
-            printerCombo.Items.Add(printer);
-
-        var defaultPrinter = new PrinterSettings().PrinterName;
-        if (printerCombo.Items.Contains(defaultPrinter))
-            printerCombo.SelectedItem = defaultPrinter;
-        else if (printerCombo.Items.Count > 0)
-            printerCombo.SelectedIndex = 0;
-    }
-
-    private void PrintReport()
-    {
-        if (printerCombo.SelectedItem is not string printerName || string.IsNullOrWhiteSpace(printerName))
+        if (cmbPorta.SelectedItem is null)
         {
-            MessageBox.Show("Selecione uma impressora.", "Controle de Saldos",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(
+                "Nenhuma porta COM foi selecionada.\n\nA CIS precisa aparecer no Gerenciador de Dispositivos em Portas (COM e LPT).",
+                "CIS não encontrada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
             return;
         }
 
-        var report = new SaldoReport
-        {
-            Atende = ReadMoney(atende),
-            Caixa = ReadMoney(caixa),
-            Cofre = ReadMoney(cofre),
-            PrinterName = printerName,
-            DateTime = DateTime.Now
-        };
+        decimal atende = LerValor(txtAtende);
+        decimal caixa = LerValor(txtCaixa);
+        decimal cofre = LerValor(txtCofre);
+        decimal total = atende + caixa + cofre;
 
-        using var document = new PrintDocument();
-        document.PrinterSettings.PrinterName = printerName;
-
-        if (!document.PrinterSettings.IsValid)
-        {
-            MessageBox.Show("A impressora selecionada não está disponível.",
-                "Controle de Saldos", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-
-        // Thermal printers commonly use 80 mm paper. The actual driver controls
-        // the physical paper size; we print within a conservative printable area.
-        document.DefaultPageSettings.Margins = new Margins(8, 8, 8, 8);
-        document.PrintPage += (_, e) => DrawReport(e, report);
+        int baud = int.Parse(cmbVelocidade.SelectedItem?.ToString() ?? DefaultBaud);
+        string porta = cmbPorta.SelectedItem.ToString()!;
 
         try
         {
-            document.Print();
-            statusSafe("Relatório enviado para a impressora.");
+            byte[] dados = MontarCupom(atende, caixa, cofre, total);
+
+            using var serial = new SerialPort(porta, baud, Parity.None, 8, StopBits.One)
+            {
+                Handshake = Handshake.None,
+                DtrEnable = false,
+                RtsEnable = false,
+                WriteTimeout = 5000,
+                ReadTimeout = 5000
+            };
+
+            serial.Open();
+            serial.Write(dados, 0, dados.Length);
+            serial.Write(new byte[] { 0x1D, 0x56, 0x00 }, 0, 3); // corte, se suportado
+
+            lblStatus.Text = $"Impressão enviada para {porta} a {baud} baud.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                $"A porta {porta} está ocupada por outro programa.\n\nFeche o programa que estiver usando a CIS e tente novamente.",
+                "Porta ocupada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Não foi possível imprimir.\n\n" + ex.Message,
-                "Controle de Saldos", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(
+                $"Não foi possível imprimir na {porta}.\n\nDetalhes: {ex.Message}\n\nSe a porta estiver correta, experimente outra velocidade (baud rate).",
+                "Erro de impressão",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
     }
 
-    private void DrawReport(PrintPageEventArgs e, SaldoReport r)
+    private static byte[] MontarCupom(decimal atende, decimal caixa, decimal cofre, decimal total)
     {
-        float x = e.MarginBounds.Left;
-        float width = e.MarginBounds.Width;
-        float y = e.MarginBounds.Top;
+        using var ms = new MemoryStream();
 
-        using var titleFont = new Font("Arial", 13, FontStyle.Bold);
-        using var smallFont = new Font("Arial", 8, FontStyle.Regular);
-        using var labelFont = new Font("Arial", 11, FontStyle.Bold);
-        using var valueFont = new Font("Arial", 19, FontStyle.Bold);
-        using var totalLabelFont = new Font("Arial", 12, FontStyle.Bold);
-        using var totalFont = new Font("Arial", 22, FontStyle.Bold);
-
-        using var center = new StringFormat { Alignment = StringAlignment.Center };
-        using var right = new StringFormat { Alignment = StringAlignment.Far };
-
-        e.Graphics.DrawString("CONTROLE DE SALDOS", titleFont, Brushes.Black,
-            new RectangleF(x, y, width, 28), center);
-        y += 30;
-
-        e.Graphics.DrawString(r.DateTime.ToString("dd/MM/yyyy  HH:mm"),
-            smallFont, Brushes.Black, new RectangleF(x, y, width, 18), center);
-        y += 28;
-
-        using var pen = new Pen(Color.Black, 1);
-        e.Graphics.DrawLine(pen, x, y, x + width, y);
-        y += 12;
-
-        DrawItem(e.Graphics, "CORREIOS ATENDE", r.Atende, x, width, ref y,
-            labelFont, valueFont, center);
-        DrawItem(e.Graphics, "CAIXA", r.Caixa, x, width, ref y,
-            labelFont, valueFont, center);
-        DrawItem(e.Graphics, "COFRE", r.Cofre, x, width, ref y,
-            labelFont, valueFont, center);
-
-        e.Graphics.DrawLine(pen, x, y, x + width, y);
-        y += 12;
-
-        e.Graphics.DrawString("TOTAL", totalLabelFont, Brushes.Black,
-            new RectangleF(x, y, width, 25), center);
-        y += 25;
-
-        var total = r.Atende + r.Caixa + r.Cofre;
-        e.Graphics.DrawString(total.ToString("C", br), totalFont, Brushes.Black,
-            new RectangleF(x, y, width, 38), center);
-        y += 45;
-
-        e.HasMorePages = false;
-    }
-
-    private static void DrawItem(
-        Graphics g, string label, decimal value, float x, float width, ref float y,
-        Font labelFont, Font valueFont, StringFormat center)
-    {
-        g.DrawString(label, labelFont, Brushes.Black,
-            new RectangleF(x, y, width, 24), center);
-        y += 25;
-
-        g.DrawString(value.ToString("C", new CultureInfo("pt-BR")), valueFont, Brushes.Black,
-            new RectangleF(x, y, width, 35), center);
-        y += 47;
-    }
-
-    private void statusSafe(string text)
-    {
-        // Keep the main UI deliberately simple; use the window title as transient feedback.
-        Text = text;
-        var timer = new System.Windows.Forms.Timer { Interval = 2200 };
-        timer.Tick += (_, _) =>
+        void W(params byte[] b) => ms.Write(b, 0, b.Length);
+        void T(string s)
         {
-            timer.Stop();
-            timer.Dispose();
-            Text = "Controle de Saldos";
-        };
-        timer.Start();
-    }
+            byte[] bytes = Encoding.GetEncoding(1252).GetBytes(s);
+            ms.Write(bytes, 0, bytes.Length);
+        }
 
-    private sealed class SaldoReport
-    {
-        public decimal Atende { get; init; }
-        public decimal Caixa { get; init; }
-        public decimal Cofre { get; init; }
-        public string PrinterName { get; init; } = "";
-        public DateTime DateTime { get; init; }
+        W(0x1B, 0x40);             // inicializa
+        W(0x1B, 0x61, 0x01);       // centraliza
+        W(0x1B, 0x45, 0x01);       // negrito
+        W(0x1D, 0x21, 0x11);       // largura/altura 2x
+        T("CONTROLE DE SALDOS");
+        W(0x0A);
+
+        W(0x1D, 0x21, 0x00);
+        T(DateTime.Now.ToString("dd/MM/yyyy HH:mm"));
+        W(0x0A, 0x0A);
+
+        W(0x1B, 0x61, 0x00);       // esquerda
+        W(0x1B, 0x45, 0x00);
+        T($"CORREIOS ATENDE: R$ {atende:N2}\r\n");
+        T($"CAIXA:           R$ {caixa:N2}\r\n");
+        T($"COFRE:           R$ {cofre:N2}\r\n");
+        W(0x0A);
+
+        W(0x1B, 0x45, 0x01);
+        W(0x1D, 0x21, 0x11);
+        T($"TOTAL: R$ {total:N2}");
+        W(0x0A, 0x0A, 0x0A, 0x0A);
+
+        W(0x1D, 0x21, 0x00);
+        W(0x1B, 0x45, 0x00);
+        W(0x1B, 0x61, 0x01);
+        T("Fim\r\n\r\n");
+
+        return ms.ToArray();
     }
 }
