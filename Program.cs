@@ -126,7 +126,7 @@ public sealed class TextPrinterEditor:UserControl
     static void Add(Control p,string label,Control c,int y){p.Controls.Add(new Label{Text=label,Bounds=new Rectangle(0,y,75,30)});c.Bounds=new Rectangle(80,y,350,30);p.Controls.Add(c);}
     byte[] Render()=>Renderer.Text(text.Text,font.Text,(float)size.Value,bold.Checked,align.SelectedIndex,(int)margin.Value);
     void Preview(){preview.Image?.Dispose();preview.Image=Renderer.Preview(Render());}
-    void Save(){var n=Prompt.Get("Nome do modelo","Modelo de impressão");if(string.IsNullOrWhiteSpace(n))return;Store.Save("text",n,new Model{text.Text,font.Text,(float)size.Value,bold.Checked,align.SelectedIndex,(int)margin.Value});models.Items.Clear();models.Items.AddRange(Store.Names("text").ToArray());models.SelectedItem=n;}
+    void Save(){var n=Prompt.Get("Nome do modelo","Modelo de impressão");if(string.IsNullOrWhiteSpace(n))return;Store.Save("text",n,new Model(text.Text,font.Text,(float)size.Value,bold.Checked,align.SelectedIndex,(int)margin.Value));models.Items.Clear();models.Items.AddRange(Store.Names("text").ToArray());models.SelectedItem=n;}
     void LoadModel(){if(models.SelectedItem is not string n||!Store.Load("text",n,out var m))return;text.Text=m.Text;font.Text=m.Font;size.Value=(decimal)m.Size;bold.Checked=m.Bold;align.SelectedIndex=m.Align;margin.Value=m.Margin;}
 }
 
