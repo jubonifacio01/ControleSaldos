@@ -17,9 +17,26 @@ internal static class Program
     [STAThread]
     static void Main()
     {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm());
+        try
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            ApplicationConfiguration.Initialize();
+
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += (_, e) => CrashLog.Show(e.Exception);
+
+            AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            {
+                if (e.ExceptionObject is Exception ex)
+                    CrashLog.Write(ex);
+            };
+
+            Application.Run(new MainForm());
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Show(ex);
+        }
     }
 }
 
@@ -64,15 +81,50 @@ public sealed class MainForm : Form
         tabs.Dock = DockStyle.Fill;
         tabs.Padding = new Point(12, 8);
 
-        var p1 = new TabPage("Controle de Saldos") { BackColor = BackColor, Padding = new Padding(10) };
-        var p2 = new TabPage("Impressão Personalizada") { BackColor = BackColor, Padding = new Padding(10) };
-        var p3 = new TabPage("Rótulos de Moedas") { BackColor = BackColor, Padding = new Padding(10) };
+        var p1 = new TabPage("Controle de Saldos")
+        {
+            BackColor = BackColor,
+            Padding = new Padding(10)
+        };
+
+        var p2 = new TabPage("Impressão Personalizada")
+        {
+            BackColor = BackColor,
+            Padding = new Padding(10),
+            Tag = false
+        };
+
+        var p3 = new TabPage("Rótulos de Moedas")
+        {
+            BackColor = BackColor,
+            Padding = new Padding(10),
+            Tag = false
+        };
 
         BuildSaldos(p1);
-        p2.Controls.Add(new TextPrinterEditor(Send));
-        p3.Controls.Add(new CoinPrinterEditor(Send));
-
         tabs.TabPages.AddRange(new[] { p1, p2, p3 });
+
+        tabs.SelectedIndexChanged += (_, _) =>
+        {
+            try
+            {
+                if (tabs.SelectedTab == p2 && p2.Controls.Count == 0)
+                {
+                    p2.Controls.Add(new TextPrinterEditor(Send));
+                    p2.Tag = true;
+                }
+                else if (tabs.SelectedTab == p3 && p3.Controls.Count == 0)
+                {
+                    p3.Controls.Add(new CoinPrinterEditor(Send));
+                    p3.Tag = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                CrashLog.Show(ex);
+                tabs.SelectedTab = p1;
+            }
+        };
     }
 
     void BuildSaldos(Control page)
@@ -1403,5 +1455,51 @@ public static class Prompt
         return f.ShowDialog() == DialogResult.OK
             ? t.Text.Trim()
             : null;
+    }
+}
+
+
+internal static class CrashLog
+{
+    static string LogPath =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ControleSaldosCIS",
+            "erro-inicializacao.txt");
+
+    public static void Write(Exception ex)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(LogPath)!;
+            Directory.CreateDirectory(dir);
+
+            File.AppendAllText(
+                LogPath,
+                $"[{DateTime.Now:dd/MM/yyyy HH:mm:ss}]\\r\\n{ex}\\r\\n\\r\\n");
+        }
+        catch
+        {
+            // Não deixar o tratamento de erro gerar outro erro.
+        }
+    }
+
+    public static void Show(Exception ex)
+    {
+        Write(ex);
+
+        try
+        {
+            MessageBox.Show(
+                $"O Controle de Saldos CIS encontrou um erro e não conseguiu concluir esta operação.\\n\\n" +
+                $"Detalhes: {ex.Message}\\n\\n" +
+                $"O erro foi registrado em:\\n{LogPath}",
+                "Controle de Saldos CIS",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+        catch
+        {
+        }
     }
 }
