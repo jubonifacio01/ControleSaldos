@@ -168,7 +168,7 @@ public sealed class MainForm : Form
         };
 
         buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        buttons.ColumnStyles.Add(new ColumnStyle.Percent, 50);
+        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
 
         var print = new Button
         {
