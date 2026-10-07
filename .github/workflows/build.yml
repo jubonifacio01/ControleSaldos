@@ -3,7 +3,9 @@ name: Build Controle de Saldos CIS
 on:
   workflow_dispatch:
   push:
-    branches: ["main"]
+    branches:
+      - "main"
+      - "feature/**"
 
 jobs:
   build:
