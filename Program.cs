@@ -53,8 +53,8 @@ public sealed class MainForm : Form
     {
         Text = "Controle de Saldos CIS";
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(1120, 800);
-        MinimumSize = new Size(980, 700);
+        ClientSize = new Size(1080, 760);
+        MinimumSize = new Size(1080, 760);
         Font = new Font("Segoe UI", 10F);
         BackColor = Color.FromArgb(245, 245, 245);
 
@@ -127,168 +127,26 @@ public sealed class MainForm : Form
         };
     }
 
-    void BuildSaldos(Control page)
+    void BuildSaldos(Control p)
     {
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 5,
-            Padding = new Padding(18),
-            BackColor = Color.White
-        };
+        AddRow(p,"CORREIOS ATENDE",atende,65); AddRow(p,"CAIXA",caixa,180); AddRow(p,"COFRE",cofre,295);
+        foreach(var t in new[]{atende,caixa,cofre}){t.TextChanged+=(_,_)=>UpdateTotal();t.KeyDown+=EnterNext;}
+        var box=new Panel{Bounds=new Rectangle(30,410,620,78),BackColor=Color.White,BorderStyle=BorderStyle.FixedSingle};
+        total.Dock=DockStyle.Fill; total.TextAlign=ContentAlignment.MiddleCenter; total.Font=new Font("Segoe UI",20,FontStyle.Bold); box.Controls.Add(total);p.Controls.Add(box);
 
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 88));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        p.Controls.Add(new Label{Text="Porta da CIS:",Bounds=new Rectangle(30,525,115,32),TextAlign=ContentAlignment.MiddleLeft});
+        porta.Bounds=new Rectangle(145,522,230,36); porta.DropDownStyle=ComboBoxStyle.DropDownList; p.Controls.Add(porta);
+        var refb=new Button{Text="ATUALIZAR",Bounds=new Rectangle(385,522,125,36)};refb.Click+=(_,_)=>RefreshPorts();p.Controls.Add(refb);
 
-        page.Controls.Add(root);
+        p.Controls.Add(new Label{Text="Velocidade:",Bounds=new Rectangle(30,570,115,32)});
+        baud.Bounds=new Rectangle(145,567,230,36);baud.DropDownStyle=ComboBoxStyle.DropDownList;
+        baud.Items.AddRange(new object[]{"9600","19200","38400","57600","115200"});baud.SelectedItem=DefaultBaud;p.Controls.Add(baud);
 
-        root.Controls.Add(new Label
-        {
-            Text = "Informe os três saldos para impressão",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 11F),
-            ForeColor = Color.DimGray,
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 0);
-
-        AddBalanceRow(root, "CORREIOS ATENDE", atende, 1);
-        AddBalanceRow(root, "CAIXA", caixa, 2);
-        AddBalanceRow(root, "COFRE", cofre, 3);
-
-        var bottom = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 1,
-            RowCount = 4,
-            Padding = new Padding(0, 12, 0, 0)
-        };
-
-        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
-        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
-        bottom.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-        bottom.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        total.Dock = DockStyle.Fill;
-        total.Font = new Font("Segoe UI", 19F, FontStyle.Bold);
-        total.TextAlign = ContentAlignment.MiddleCenter;
-        total.BackColor = Color.FromArgb(248, 248, 248);
-        total.BorderStyle = BorderStyle.FixedSingle;
-        bottom.Controls.Add(total, 0, 0);
-
-        var settings = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 4
-        };
-
-        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
-        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 92));
-        settings.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-
-        settings.Controls.Add(new Label
-        {
-            Text = "Porta CIS:",
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 0);
-
-        porta.Dock = DockStyle.Fill;
-        porta.DropDownStyle = ComboBoxStyle.DropDownList;
-        settings.Controls.Add(porta, 1, 0);
-
-        var refresh = new Button { Text = "Atualizar", Dock = DockStyle.Fill };
-        refresh.Click += (_, _) => RefreshPorts();
-        settings.Controls.Add(refresh, 2, 0);
-
-        baud.Dock = DockStyle.Fill;
-        baud.DropDownStyle = ComboBoxStyle.DropDownList;
-        baud.Items.AddRange(new object[] { "9600", "19200", "38400", "57600", "115200" });
-        baud.SelectedItem = DefaultBaud;
-        settings.Controls.Add(baud, 3, 0);
-
-        bottom.Controls.Add(settings, 0, 1);
-
-        var buttons = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2
-        };
-
-        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        buttons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-
-        var print = new Button
-        {
-            Text = "IMPRIMIR SALDOS",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-            BackColor = Color.White
-        };
-        print.Click += (_, _) => Send(Renderer.Saldos(Value(atende), Value(caixa), Value(cofre)));
-        buttons.Controls.Add(print, 0, 0);
-
-        var clear = new Button
-        {
-            Text = "LIMPAR",
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-            BackColor = Color.White
-        };
-        clear.Click += (_, _) =>
-        {
-            atende.Clear();
-            caixa.Clear();
-            cofre.Clear();
-            atende.Focus();
-        };
-        buttons.Controls.Add(clear, 1, 0);
-
-        bottom.Controls.Add(buttons, 0, 2);
-
-        status.Dock = DockStyle.Fill;
-        status.TextAlign = ContentAlignment.MiddleCenter;
-        status.ForeColor = Color.DimGray;
-        status.Text = "Pronto.";
-        bottom.Controls.Add(status, 0, 3);
-
-        root.Controls.Add(bottom, 0, 4);
-
-        foreach (var t in new[] { atende, caixa, cofre })
-        {
-            t.TextChanged += (_, _) => UpdateTotal();
-            t.KeyDown += EnterNext;
-        }
-    }
-
-    static void AddBalanceRow(TableLayoutPanel root, string label, TextBox box, int row)
-    {
-        var panel = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            Margin = new Padding(0, 5, 0, 5)
-        };
-
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-
-        panel.Controls.Add(new Label
-        {
-            Text = label,
-            Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 12.5F, FontStyle.Bold),
-            TextAlign = ContentAlignment.MiddleLeft
-        }, 0, 0);
-
-        box.Dock = DockStyle.Fill;
-        panel.Controls.Add(box, 1, 0);
-
-        root.Controls.Add(panel, 0, row);
+        var pr=new Button{Text="IMPRIMIR SALDOS",Bounds=new Rectangle(30,625,300,55),Font=new Font("Segoe UI",13,FontStyle.Bold),BackColor=Color.White};
+        pr.Click+=(_,_)=>Send(Renderer.Saldos(Value(atende),Value(caixa),Value(cofre)));p.Controls.Add(pr);
+        var cl=new Button{Text="LIMPAR",Bounds=new Rectangle(350,625,300,55),Font=new Font("Segoe UI",13,FontStyle.Bold),BackColor=Color.White};
+        cl.Click+=(_,_)=>{atende.Clear();caixa.Clear();cofre.Clear();};p.Controls.Add(cl);
+        status.Bounds=new Rectangle(30,690,620,24);status.TextAlign=ContentAlignment.MiddleCenter;status.ForeColor=Color.DimGray;p.Controls.Add(status);
     }
 
     static TextBox Money() => new()
@@ -1476,7 +1334,7 @@ internal static class CrashLog
 
             File.AppendAllText(
                 LogPath,
-                $"[{DateTime.Now:dd/MM/yyyy HH:mm:ss}]\\r\\n{ex}\\r\\n\\r\\n");
+                $"[{DateTime.Now:dd/MM/yyyy HH:mm:ss}]\r\n{ex}\r\n\r\n");
         }
         catch
         {
@@ -1491,9 +1349,9 @@ internal static class CrashLog
         try
         {
             MessageBox.Show(
-                $"O Controle de Saldos CIS encontrou um erro e não conseguiu concluir esta operação.\\n\\n" +
-                $"Detalhes: {ex.Message}\\n\\n" +
-                $"O erro foi registrado em:\\n{LogPath}",
+                $"O Controle de Saldos CIS encontrou um erro e não conseguiu concluir esta operação.\n\n" +
+                $"Detalhes: {ex.Message}\n\n" +
+                $"O erro foi registrado em:\n{LogPath}",
                 "Controle de Saldos CIS",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
